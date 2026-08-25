@@ -2,23 +2,15 @@ package main
 
 import (
 	"log"
-	"log/slog"
 	"net/http"
-	"runtime/debug"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/BakhytzhanulyE/microservices-course-BakhytzhanulyE/order/internal/handler"
+	"github.com/BakhytzhanulyE/microservices-course-BakhytzhanulyE/order/internal/middleware"
+	"github.com/BakhytzhanulyE/microservices-course-BakhytzhanulyE/order/internal/storage"
 )
-
-type statusRecorder struct {
-	http.ResponseWriter
-	status int
-}
-
-func (rec *statusRecorder) WriteHeader(code int) {
-	rec.status = code
-	rec.ResponseWriter.WriteHeader(code)
-}
 
 // Адрес и таймауты держим константами, чтобы не разбрасывать «магические» числа по коду.
 const (
@@ -29,52 +21,25 @@ const (
 	idleTimeout       = 60 * time.Second
 )
 
-// healthHandler отвечает 200 OK — простейшая проверка живости сервиса.
-func healthHandler(w http.ResponseWriter, _ *http.Request) {
-	if _, err := w.Write([]byte("OK")); err != nil {
-		slog.Error("health: не удалось записать ответ", "error", err)
-	}
-}
-
-func loggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
-		next.ServeHTTP(rec, r)
-		duration := time.Since(start)
-		slog.Info("request",
-			slog.String("method", r.Method),
-			slog.String("path", r.URL.Path),
-			slog.Int("status", rec.status),
-			slog.Duration("duration", duration))
-	})
-}
-
-func myRecoverer(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer func() {
-			if rvr := recover(); rvr != nil {
-				slog.Error("panic recovered", slog.Any("error", rvr), slog.String("stack", string(debug.Stack())))
-				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			}
-		}()
-		next.ServeHTTP(w, r)
-	})
-}
-
 func main() {
-	r := chi.NewRouter()
-	r.Use(loggingMiddleware)
-	r.Use(myRecoverer)
+	s := storage.NewStorage()
+	h := handler.NewHandler(s)
 
-	r.Get("/health", healthHandler)
-	r.Get("/boom", func(_ http.ResponseWriter, _ *http.Request) {
+	router := chi.NewRouter()
+	router.Use(middleware.Logging)
+	router.Use(middleware.Recoverer)
+
+	router.Get("/health", h.Health)
+	router.Get("/boom", func(_ http.ResponseWriter, _ *http.Request) {
 		panic("boom!")
 	})
+	router.Get("/api/v1/orders/{order_uuid}", h.GetOrder)
+
+	router.Post("/api/v1/orders", h.CreateOrder)
 
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           r,
+		Handler:           router,
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       readTimeout,
 		WriteTimeout:      writeTimeout,
