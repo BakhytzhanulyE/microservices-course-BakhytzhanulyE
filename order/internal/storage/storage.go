@@ -1,8 +1,13 @@
 package storage
 
-import "github.com/BakhytzhanulyE/microservices-course-BakhytzhanulyE/order/internal/model"
+import (
+	"sync"
+
+	"github.com/BakhytzhanulyE/microservices-course-BakhytzhanulyE/order/internal/model"
+)
 
 type Storage struct {
+	mu     sync.RWMutex
 	orders map[string]model.Order
 }
 
@@ -17,20 +22,25 @@ func NewStorage() *Storage {
 }
 
 func (s *Storage) Get(orderUUID string) (model.Order, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	order, ok := s.orders[orderUUID]
 	return order, ok
 }
 
 func (s *Storage) Create(order model.Order) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.orders[order.UUID] = order
 }
 
 func (s *Storage) Update(order model.Order) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	_, ok := s.orders[order.UUID]
 
 	if ok {
 		s.orders[order.UUID] = order
 	}
-
 	return ok
 }
