@@ -36,6 +36,7 @@ func main() {
 	router.Get("/api/v1/orders/{order_uuid}", h.GetOrder)
 
 	router.Post("/api/v1/orders", h.CreateOrder)
+	router.Post("/api/v1/orders/{order_uuid}/pay", h.PayOrder)
 
 	srv := &http.Server{
 		Addr:              addr,

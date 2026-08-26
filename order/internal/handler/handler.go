@@ -44,6 +44,41 @@ func (h *Handler) GetOrder(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *Handler) PayOrder(w http.ResponseWriter, r *http.Request) {
+	orderUUID := chi.URLParam(r, "order_uuid")
+
+	var req model.PayOrderRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	order, ok := h.storage.Get(orderUUID)
+	if !ok {
+		http.Error(w, "Order not found", http.StatusNotFound)
+		return
+	}
+
+	order.Status = "PAID"
+
+	if !h.storage.Update(order) {
+		http.Error(w, "Failed to update order", http.StatusInternalServerError)
+		return
+	}
+
+	resp := model.PayOrderResponse{
+		TransactionUUID: uuid.NewString(),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		slog.Error("PayOrder: не удалось записать ответ", "error", err)
+		return
+	}
+}
+
 // CreateOrder создаёт заказ из JSON-тела запроса и возвращает его с кодом 201.
 // На некорректное тело отвечает 400.
 func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
