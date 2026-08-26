@@ -56,7 +56,7 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	order := &model.Order{
+	order := model.Order{
 		UUID:       uuid.NewString(),
 		UserUUID:   req.UserUUID,
 		TotalPrice: req.TotalPrice,
