@@ -7,6 +7,13 @@ type Order struct {
 	Status     string  `json:"status"`
 }
 
+const (
+	StatusPendingPayment = "PENDING_PAYMENT"
+	StatusPaid           = "PAID"
+	StatusCompleted      = "COMPLETED"
+	StatusShipped        = "SHIPPED"
+)
+
 type CreateOrderRequest struct {
 	UserUUID   string  `json:"user_uuid"`
 	TotalPrice float64 `json:"total_price"`

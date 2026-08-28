@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -55,16 +56,16 @@ func (h *Handler) PayOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	order, ok := h.storage.Get(orderUUID)
-	if !ok {
+	err := h.storage.Pay(orderUUID)
+	switch {
+	case errors.Is(err, storage.ErrOrderNotFound):
 		http.Error(w, "Order not found", http.StatusNotFound)
 		return
-	}
-
-	order.Status = "PAID"
-
-	if !h.storage.Update(order) {
-		http.Error(w, "Failed to update order", http.StatusInternalServerError)
+	case errors.Is(err, storage.ErrOrderNotPendingPayment):
+		http.Error(w, "order is not awaiting payment", http.StatusConflict)
+		return
+	case err != nil:
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
@@ -95,7 +96,7 @@ func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		UUID:       uuid.NewString(),
 		UserUUID:   req.UserUUID,
 		TotalPrice: req.TotalPrice,
-		Status:     "PENDING_PAYMENT",
+		Status:     model.StatusPendingPayment,
 	}
 
 	h.storage.Create(order)

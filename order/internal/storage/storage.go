@@ -1,9 +1,15 @@
 package storage
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/BakhytzhanulyE/microservices-course-BakhytzhanulyE/order/internal/model"
+)
+
+var (
+	ErrOrderNotFound          = errors.New("order not found")
+	ErrOrderNotPendingPayment = errors.New("order is not pending payment")
 )
 
 type Storage struct {
@@ -14,9 +20,9 @@ type Storage struct {
 func NewStorage() *Storage {
 	return &Storage{
 		orders: map[string]model.Order{
-			"1": {UUID: "1", UserUUID: "user1", TotalPrice: 100.0, Status: "pending"},
-			"2": {UUID: "2", UserUUID: "user2", TotalPrice: 200.0, Status: "completed"},
-			"3": {UUID: "3", UserUUID: "user3", TotalPrice: 300.0, Status: "shipped"},
+			"1": {UUID: "1", UserUUID: "user1", TotalPrice: 100.0, Status: model.StatusPendingPayment},
+			"2": {UUID: "2", UserUUID: "user2", TotalPrice: 200.0, Status: model.StatusCompleted},
+			"3": {UUID: "3", UserUUID: "user3", TotalPrice: 300.0, Status: model.StatusShipped},
 		},
 	}
 }
@@ -34,13 +40,20 @@ func (s *Storage) Create(order model.Order) {
 	s.orders[order.UUID] = order
 }
 
-func (s *Storage) Update(order model.Order) bool {
+func (s *Storage) Pay(orderUUID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, ok := s.orders[order.UUID]
-
-	if ok {
-		s.orders[order.UUID] = order
+	order, ok := s.orders[orderUUID]
+	if !ok {
+		return ErrOrderNotFound
 	}
-	return ok
+	if order.Status != model.StatusPendingPayment {
+		return ErrOrderNotPendingPayment
+	}
+
+	order.Status = model.StatusPaid
+
+	s.orders[orderUUID] = order
+
+	return nil
 }
