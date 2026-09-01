@@ -6,6 +6,7 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -137,7 +138,10 @@ func (d *diContainer) PaymentClient(_ context.Context) grpcClient.PaymentClient 
 // dialGRPC создаёт соединение. grpc.NewClient не ходит в сеть сразу —
 // соединение поднимется лениво при первом вызове, поэтому порядок старта сервисов не важен.
 func (d *diContainer) dialGRPC(name, address string) *grpc.ClientConn {
-	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(address,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	)
 	if err != nil {
 		panic(fmt.Sprintf("не удалось создать gRPC-клиент %s: %v", name, err))
 	}

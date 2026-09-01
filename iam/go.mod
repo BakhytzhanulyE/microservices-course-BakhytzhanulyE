@@ -16,6 +16,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/pressly/goose/v3 v3.27.3
 	github.com/stretchr/testify v1.12.1
+	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.70.0
 	go.uber.org/zap v1.28.0
 	golang.org/x/crypto v0.55.0
 	google.golang.org/grpc v1.83.2

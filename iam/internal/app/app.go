@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -164,6 +165,9 @@ func (a *App) initListener(_ context.Context) error {
 func (a *App) initGRPCServer(ctx context.Context) error {
 	a.grpcServer = grpc.NewServer(
 		grpc.Creds(insecure.NewCredentials()),
+		// StatsHandler, а не интерсептор: otelgrpc так видит и unary, и стримы,
+		// и сам вытаскивает контекст трассировки из метаданных запроса.
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(
 			interceptor.Recovery(),
 			interceptor.Logging(),

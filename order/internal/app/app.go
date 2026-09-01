@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 
 	"github.com/BakhytzhanulyE/microservices-course-BakhytzhanulyE/order/internal/config"
@@ -139,8 +140,10 @@ func (a *App) initHTTPServer(ctx context.Context) error {
 	httpCfg := config.AppConfig().HTTP
 
 	a.httpServer = &http.Server{
-		Addr:              httpCfg.Address(),
-		Handler:           a.diContainer.OrderV1API(ctx).Router(),
+		Addr: httpCfg.Address(),
+		// otelhttp заводит корневой спан запроса — от него дальше наследуются
+		// спаны вызовов inventory и payment.
+		Handler:           otelhttp.NewHandler(a.diContainer.OrderV1API(ctx).Router(), "order-http"),
 		ReadHeaderTimeout: httpCfg.ReadHeaderTimeout(),
 		ReadTimeout:       httpCfg.ReadTimeout(),
 		WriteTimeout:      httpCfg.WriteTimeout(),
