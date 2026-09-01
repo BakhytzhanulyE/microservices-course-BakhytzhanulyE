@@ -1,28 +1,56 @@
+// Package model описывает доменные сущности заказа.
 package model
 
-type Order struct {
-	UUID       string  `json:"order_uuid"`
-	UserUUID   string  `json:"user_uuid"`
-	TotalPrice float64 `json:"total_price"`
-	Status     string  `json:"status"`
-}
+import "time"
+
+// OrderStatus — состояние заказа.
+type OrderStatus string
 
 const (
-	StatusPendingPayment = "PENDING_PAYMENT"
-	StatusPaid           = "PAID"
-	StatusCompleted      = "COMPLETED"
-	StatusShipped        = "SHIPPED"
+	// OrderStatusPendingPayment — заказ создан и ждёт оплаты.
+	OrderStatusPendingPayment OrderStatus = "PENDING_PAYMENT"
+	// OrderStatusPaid — заказ оплачен.
+	OrderStatusPaid OrderStatus = "PAID"
+	// OrderStatusCancelled — заказ отменён.
+	OrderStatusCancelled OrderStatus = "CANCELLED"
 )
 
-type CreateOrderRequest struct {
-	UserUUID   string  `json:"user_uuid"`
-	TotalPrice float64 `json:"total_price"`
+// Order — заказ на детали космического корабля.
+type Order struct {
+	UUID            string
+	UserUUID        string
+	PartUUIDs       []string
+	TotalPrice      float64
+	TransactionUUID *string
+	PaymentMethod   *string
+	Status          OrderStatus
+	CreatedAt       time.Time
+	UpdatedAt       *time.Time
 }
 
-type PayOrderRequest struct {
-	PaymentMethod string `json:"payment_method"`
+// CreateOrderParams — что нужно, чтобы создать заказ.
+type CreateOrderParams struct {
+	UserUUID  string
+	PartUUIDs []string
 }
 
-type PayOrderResponse struct {
-	TransactionUUID string `json:"transaction_uuid"`
+// PayOrderParams — что нужно, чтобы оплатить заказ.
+type PayOrderParams struct {
+	OrderUUID     string
+	PaymentMethod string
+}
+
+// UpdateOrderParams — поля, которые можно изменить у заказа.
+// nil означает «не трогать это поле».
+type UpdateOrderParams struct {
+	Status          *OrderStatus
+	TransactionUUID *string
+	PaymentMethod   *string
+}
+
+// Part — деталь, как её видит сервис заказов. Полная карточка живёт в inventory.
+type Part struct {
+	UUID  string
+	Name  string
+	Price float64
 }
