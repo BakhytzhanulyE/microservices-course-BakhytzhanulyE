@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package payment.v1;
+
+option go_package = "github.com/BakhytzhanulyE/microservices-course-BakhytzhanulyE/shared/pkg/proto/payment/v1;payment_v1";
+
+// PaymentService — приём оплаты за заказ.
+service PaymentService {
+  // PayOrder проводит оплату заказа и возвращает UUID транзакции.
+  rpc PayOrder(PayOrderRequest) returns (PayOrderResponse);
+}
+
+// PaymentMethod — способ оплаты.
+enum PaymentMethod {
+  // PAYMENT_METHOD_UNSPECIFIED — способ оплаты не указан.
+  PAYMENT_METHOD_UNSPECIFIED = 0;
+  // PAYMENT_METHOD_CARD — банковская карта.
+  PAYMENT_METHOD_CARD = 1;
+  // PAYMENT_METHOD_SBP — система быстрых платежей.
+  PAYMENT_METHOD_SBP = 2;
+  // PAYMENT_METHOD_CREDIT_CARD — кредитная карта.
+  PAYMENT_METHOD_CREDIT_CARD = 3;
+  // PAYMENT_METHOD_INVESTOR_MONEY — деньги инвестора.
+  PAYMENT_METHOD_INVESTOR_MONEY = 4;
+}
+
+// PayOrderRequest — запрос на оплату заказа.
+message PayOrderRequest {
+  // UUID заказа.
+  string order_uuid = 1;
+  // UUID пользователя.
+  string user_uuid = 2;
+  // Способ оплаты.
+  PaymentMethod payment_method = 3;
+}
+
+// PayOrderResponse — результат оплаты.
+message PayOrderResponse {
+  // UUID проведённой транзакции.
+  string transaction_uuid = 1;
+}
