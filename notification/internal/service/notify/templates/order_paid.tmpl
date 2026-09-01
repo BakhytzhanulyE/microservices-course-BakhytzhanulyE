@@ -1,0 +1,6 @@
+💳 Заказ оплачен
+
+Заказ: {{ .OrderUUID }}
+Сумма: {{ printf "%.2f" .PaymentAmount }} ₸
+Способ оплаты: {{ .PaymentMethod }}
+Транзакция: {{ .TransactionUUID }}
