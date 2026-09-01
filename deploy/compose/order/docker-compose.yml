@@ -40,7 +40,9 @@ services:
       postgres-order:
         condition: service_healthy
     healthcheck:
-      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:${HTTP_PORT}/health" ]
+      # -O /dev/null, а не --spider: --spider шлёт HEAD, а на /health зарегистрирован
+      # только GET — chi отвечает 405 и healthcheck считает сервис мёртвым.
+      test: [ "CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:${HTTP_PORT}/health" ]
       interval: 10s
       timeout: 5s
       retries: 5
