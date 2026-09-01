@@ -1,0 +1,28 @@
+# Платёжный сервис. Своего хранилища у него нет.
+services:
+
+  payment:
+    build:
+      context: ../../..
+      dockerfile: payment/Dockerfile
+    container_name: payment
+    env_file:
+      - .env
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+    ports:
+      - "${GRPC_PORT}:${GRPC_PORT}"
+      - "${METRICS_PORT}:${METRICS_PORT}"
+    healthcheck:
+      test: [ "CMD", "/bin/grpc-health-probe", "-addr=localhost:${GRPC_PORT}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - microservices-net
+
+networks:
+  microservices-net:
+    external: true
