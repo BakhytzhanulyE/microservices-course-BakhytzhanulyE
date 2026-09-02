@@ -26,6 +26,10 @@ jobs:
         uses: actions/setup-go@v7.0.0
         with:
           go-version: ${{ inputs.go-version }}
+          # Репозиторий многомодульный, go.mod в корне нет — по умолчанию
+          # setup-go ищет его именно там, не находит и молча отключает кеш
+          # модулей: каждый прогон заново качал все зависимости.
+          cache-dependency-path: "**/go.sum"
 
       - name: 🐾 Show go.work (debug)
         run: cat go.work || echo "❗ go.work not found"
