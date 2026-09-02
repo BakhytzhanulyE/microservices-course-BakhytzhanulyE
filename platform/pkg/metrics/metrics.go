@@ -17,6 +17,7 @@ import (
 const (
 	readHeaderTimeout = 5 * time.Second
 	metricsPath       = "/metrics"
+	healthPath        = "/health"
 )
 
 // Registry — реестр метрик приложения. Свой, а не default: так в него не попадает
@@ -119,10 +120,19 @@ func UnaryServerInterceptor() grpc.UnaryServerInterceptor {
 	}
 }
 
-// NewServer собирает HTTP-сервер, отдающий метрики на /metrics.
+// NewServer собирает HTTP-сервер, отдающий метрики на /metrics и liveness на /health.
+//
+// /health нужен сервисам без собственного HTTP-порта — консьюмерам Kafka: без него
+// Docker показывал их просто «Up», не отличая живой процесс от повисшего. Проверка
+// намеренно простая (процесс отвечает — значит жив), и этого достаточно: если
+// консьюмер падает, App.Run возвращает ошибку и процесс завершается целиком,
+// так что «живой процесс с мёртвым консьюмером» — недостижимое состояние.
 func NewServer(addr string) *http.Server {
 	mux := http.NewServeMux()
 	mux.Handle(metricsPath, promhttp.HandlerFor(Registry, promhttp.HandlerOpts{Registry: Registry}))
+	mux.HandleFunc(healthPath, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 
 	return &http.Server{
 		Addr:              addr,

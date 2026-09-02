@@ -13,6 +13,15 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
     ports:
       - "${METRICS_PORT}:${METRICS_PORT}"
+    healthcheck:
+      # У консьюмера нет своего API — проверяем /health на порту метрик.
+      # -O /dev/null, а не --spider: --spider шлёт HEAD, и на сервисах с chi
+      # это уже приводило к 405 и «мёртвому» контейнеру.
+      test: [ "CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:${METRICS_PORT}/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     restart: unless-stopped
     networks:
       - microservices-net
