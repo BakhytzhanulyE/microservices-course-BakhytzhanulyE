@@ -27,13 +27,38 @@ func Logging() grpc.UnaryServerInterceptor {
 			zap.Duration("duration", time.Since(start)),
 		}
 
-		if err != nil {
-			logger.Error(ctx, "gRPC вызов завершился ошибкой", append(fields, zap.Error(err))...)
-		} else {
+		switch {
+		case err == nil:
 			logger.Info(ctx, "gRPC вызов", fields...)
+		case isClientError(status.Code(err)):
+			logger.Warn(ctx, "gRPC вызов отклонён", append(fields, zap.Error(err))...)
+		default:
+			logger.Error(ctx, "gRPC вызов завершился ошибкой", append(fields, zap.Error(err))...)
 		}
 
 		return resp, err
+	}
+}
+
+// isClientError отличает «клиент попросил невозможное» от «сервис сломался».
+//
+// Повторная регистрация или запрос несуществующего заказа — штатный отказ по
+// бизнес-правилу, а не сбой. Писать их уровнем ERROR вредно: алерты по частоте
+// ошибок начинают срабатывать на обычном поведении пользователей, и настоящая
+// авария тонет в этом шуме.
+func isClientError(code codes.Code) bool {
+	switch code {
+	case codes.InvalidArgument,
+		codes.NotFound,
+		codes.AlreadyExists,
+		codes.PermissionDenied,
+		codes.Unauthenticated,
+		codes.FailedPrecondition,
+		codes.OutOfRange,
+		codes.Canceled:
+		return true
+	default:
+		return false
 	}
 }
 
