@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package iam.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/BakhytzhanulyE/microservices-course-BakhytzhanulyE/shared/pkg/proto/iam/v1;iam_v1";
+
+// AuthService — регистрация, вход и проверка токена.
+service AuthService {
+  // Register создаёт нового пользователя.
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+
+  // Login выдаёт пару токенов по логину и паролю.
+  rpc Login(LoginRequest) returns (LoginResponse);
+
+  // Whoami возвращает пользователя по access-токену.
+  rpc Whoami(WhoamiRequest) returns (WhoamiResponse);
+}
+
+// User — пользователь системы.
+message User {
+  // UUID пользователя.
+  string uuid = 1;
+  // Логин пользователя.
+  string login = 2;
+  // Электронная почта.
+  string email = 3;
+  // Время регистрации.
+  google.protobuf.Timestamp created_at = 4;
+}
+
+// Session — активная сессия пользователя.
+message Session {
+  // UUID сессии.
+  string uuid = 1;
+  // UUID пользователя.
+  string user_uuid = 2;
+  // Момент истечения сессии.
+  google.protobuf.Timestamp expires_at = 3;
+}
+
+// RegisterRequest — запрос на регистрацию.
+message RegisterRequest {
+  // Логин пользователя.
+  string login = 1;
+  // Электронная почта.
+  string email = 2;
+  // Пароль в открытом виде, хранится только в виде хеша.
+  string password = 3;
+}
+
+// RegisterResponse — результат регистрации.
+message RegisterResponse {
+  // UUID созданного пользователя.
+  string user_uuid = 1;
+}
+
+// LoginRequest — запрос на вход.
+message LoginRequest {
+  // Логин пользователя.
+  string login = 1;
+  // Пароль в открытом виде.
+  string password = 2;
+}
+
+// LoginResponse — выданные токены.
+message LoginResponse {
+  // Access-токен, живёт недолго.
+  string access_token = 1;
+  // Refresh-токен, живёт дольше и хранится в Redis.
+  string refresh_token = 2;
+}
+
+// WhoamiRequest — запрос владельца токена.
+message WhoamiRequest {
+  // Access-токен.
+  string access_token = 1;
+}
+
+// WhoamiResponse — владелец токена и его сессия.
+message WhoamiResponse {
+  // Сессия, к которой привязан токен.
+  Session session = 1;
+  // Пользователь — владелец токена.
+  User user = 2;
+}

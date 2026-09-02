@@ -17,8 +17,10 @@
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
-# env file
+# env file — генерируется из deploy/env/.env.template командой `task env:generate`
 .env
+/deploy/env/.env
+/deploy/compose/*/.env
 /.idea
 /.vscode
 /.cursor
@@ -29,3 +31,10 @@ node_modules
 /shared/api/bundles/
 /coverage/
 /order/order
+
+# Собранные бинарники сервисов
+/assembly/assembly
+/iam/iam
+/inventory/inventory
+/notification/notification
+/payment/payment

@@ -6,12 +6,25 @@ vars:
   GOLANGCI_LINT_VERSION: 'v2.12.2'
   GCI_VERSION: 'v0.14.0'
   GOFUMPT_VERSION: 'v0.11.0'
+  BUF_VERSION: 'v1.58.0'
+  PROTOC_GEN_GO_VERSION: 'v1.36.10'
+  PROTOC_GEN_GO_GRPC_VERSION: 'v1.5.1'
+  GRPCURL_VERSION: 'v1.9.3'
+  ENVSUBST_VERSION: 'v1.4.3'
 
   BIN_DIR: '{{.ROOT_DIR}}/bin'
   GOLANGCI_LINT: '{{.BIN_DIR}}/golangci-lint'
   GCI: '{{.BIN_DIR}}/gci'
   GOFUMPT: '{{.BIN_DIR}}/gofumpt'
-  MODULES: assembly inventory order payment platform iam notification
+  BUF: '{{.BIN_DIR}}/buf'
+  PROTOC_GEN_GO: '{{.BIN_DIR}}/protoc-gen-go'
+  PROTOC_GEN_GO_GRPC: '{{.BIN_DIR}}/protoc-gen-go-grpc'
+  GRPCURL: '{{.BIN_DIR}}/grpcurl'
+  ENVSUBST: '{{.BIN_DIR}}/envsubst'
+  ENVDIR: '{{.ROOT_DIR}}/deploy/env'
+
+  MODULES: assembly iam inventory notification order payment platform shared
+  SERVICES: core,iam,inventory,order,payment,assembly,notification
 
 tasks:
   install-formatters:
@@ -110,3 +123,366 @@ tasks:
           fi
         done
         exit $ERR
+
+  deps:update:
+    desc: "Обновляет зависимости во всех модулях и синхронизирует go.work"
+    summary: |
+      Прогоняет go work sync и go mod tidy по каждому модулю.
+      Запускать после добавления новых зависимостей в любой сервис.
+    cmds:
+      - |
+        set -e
+        echo "🔄 Синхронизируем go.work"
+        go work sync
+        for mod in {{.MODULES}}; do
+          if [ -d "$mod" ]; then
+            echo "🔄 go mod tidy в $mod"
+            (cd "$mod" && go mod tidy)
+          fi
+        done
+
+  build:
+    desc: "Собирает все модули — быстрая проверка, что проект компилируется"
+    cmds:
+      - |
+        set -e
+        for mod in {{.MODULES}}; do
+          if [ -d "$mod" ]; then
+            echo "🔨 Собираем $mod"
+            go build ./$mod/...
+          fi
+        done
+
+  test:
+    desc: "Прогоняет unit-тесты во всех модулях с race-детектором"
+    cmds:
+      - |
+        set -e
+        for mod in {{.MODULES}}; do
+          if [ -d "$mod" ]; then
+            echo "🧪 Тесты в $mod"
+            go test -race -count=1 ./$mod/...
+          fi
+        done
+
+  test:coverage:
+    desc: "Прогоняет тесты и собирает покрытие в coverage/coverage.out"
+    cmds:
+      - |
+        set -e
+        mkdir -p coverage
+        go test -race -count=1 -coverprofile=coverage/coverage.out -covermode=atomic ./... || true
+        go tool cover -func=coverage/coverage.out | tail -1
+
+  install-buf:
+    desc: "Устанавливает buf в ./bin"
+    cmds:
+      - |
+        mkdir -p {{.BIN_DIR}}
+        [ -f {{.BUF}} ] || {
+          echo '📦 Устанавливаем buf {{.BUF_VERSION}}...'
+          GOBIN={{.BIN_DIR}} go install github.com/bufbuild/buf/cmd/buf@{{.BUF_VERSION}}
+        }
+    status:
+      - test -x {{.BUF}}
+
+  proto:install-plugins:
+    desc: "Устанавливает protoc-плагины в ./bin"
+    cmds:
+      - |
+        [ -f {{.PROTOC_GEN_GO}} ] || {
+          echo '📦 Устанавливаем protoc-gen-go {{.PROTOC_GEN_GO_VERSION}}...'
+          GOBIN={{.BIN_DIR}} go install google.golang.org/protobuf/cmd/protoc-gen-go@{{.PROTOC_GEN_GO_VERSION}}
+        }
+        [ -f {{.PROTOC_GEN_GO_GRPC}} ] || {
+          echo '📦 Устанавливаем protoc-gen-go-grpc {{.PROTOC_GEN_GO_GRPC_VERSION}}...'
+          GOBIN={{.BIN_DIR}} go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@{{.PROTOC_GEN_GO_GRPC_VERSION}}
+        }
+    status:
+      - test -x {{.PROTOC_GEN_GO}}
+      - test -x {{.PROTOC_GEN_GO_GRPC}}
+
+  proto:lint:
+    desc: "Проверяет .proto-файлы на соответствие стилю"
+    deps: [ install-buf ]
+    dir: shared/proto
+    cmds:
+      - '{{.BUF}} lint'
+
+  proto:gen:
+    desc: "Генерирует Go-код из .proto в shared/pkg/proto"
+    deps: [ install-buf, proto:install-plugins, proto:lint ]
+    dir: shared/proto
+    cmds:
+      - '{{.BUF}} generate'
+
+  grpcurl:install:
+    desc: "Устанавливает grpcurl в ./bin"
+    cmds:
+      - |
+        [ -f {{.GRPCURL}} ] || {
+          echo '📦 Устанавливаем grpcurl {{.GRPCURL_VERSION}}...'
+          GOBIN={{.BIN_DIR}} go install github.com/fullstorydev/grpcurl/cmd/grpcurl@{{.GRPCURL_VERSION}}
+        }
+    status:
+      - test -x {{.GRPCURL}}
+
+  env:install-envsubst:
+    desc: "Устанавливает envsubst в ./bin"
+    cmds:
+      - |
+        [ -f {{.ENVSUBST}} ] || {
+          echo "📦 Устанавливаем envsubst {{.ENVSUBST_VERSION}}..."
+          GOBIN={{.BIN_DIR}} go install github.com/a8m/envsubst/cmd/envsubst@{{.ENVSUBST_VERSION}}
+        }
+    status:
+      - test -x {{.ENVSUBST}}
+
+  env:generate:
+    desc: "Генерирует .env для каждого сервиса из deploy/env/.env и шаблонов"
+    summary: |
+      Единственный файл, который правит человек — deploy/env/.env.
+      Всё остальное раскладывается по deploy/compose/<сервис>/.env скриптом generate-env.sh.
+    deps: [ env:install-envsubst ]
+    cmds:
+      - |
+        set -e
+        ENV_FILE="{{.ENVDIR}}/.env"
+        TEMPLATE_FILE="{{.ENVDIR}}/.env.template"
+        SCRIPT="{{.ENVDIR}}/generate-env.sh"
+
+        if [ ! -f "$ENV_FILE" ]; then
+          echo "🔄 Файла $ENV_FILE нет, создаём из $TEMPLATE_FILE"
+          cp "$TEMPLATE_FILE" "$ENV_FILE"
+        fi
+
+        chmod +x "$SCRIPT"
+        export SERVICES="{{.SERVICES}}"
+        ENV_SUBST={{.ENVSUBST}} "$SCRIPT"
+
+  up-core:
+    desc: "Поднимает общую инфраструктуру: Kafka, Kafka UI, Redis"
+    dir: deploy/compose/core
+    deps: [ env:generate ]
+    cmds:
+      - docker network inspect microservices-net >/dev/null 2>&1 || docker network create microservices-net
+      - docker compose up --build --detach
+
+  down-core:
+    desc: "Останавливает общую инфраструктуру"
+    dir: deploy/compose/core
+    cmds:
+      - docker compose down --volumes
+
+  up-inventory:
+    desc: "Поднимает inventory вместе с MongoDB"
+    dir: deploy/compose/inventory
+    deps: [ env:generate ]
+    cmds:
+      - docker compose up --build --detach
+
+  down-inventory:
+    desc: "Останавливает inventory"
+    dir: deploy/compose/inventory
+    cmds:
+      - docker compose down --volumes
+
+  up-order:
+    desc: "Поднимает order вместе с PostgreSQL"
+    dir: deploy/compose/order
+    deps: [ env:generate ]
+    cmds:
+      - docker compose up --build --detach
+
+  down-order:
+    desc: "Останавливает order"
+    dir: deploy/compose/order
+    cmds:
+      - docker compose down --volumes
+
+  up-payment:
+    desc: "Поднимает payment"
+    dir: deploy/compose/payment
+    deps: [ env:generate ]
+    cmds:
+      - docker compose up --build --detach
+
+  down-payment:
+    desc: "Останавливает payment"
+    dir: deploy/compose/payment
+    cmds:
+      - docker compose down --volumes
+
+  up-assembly:
+    desc: "Поднимает assembly"
+    dir: deploy/compose/assembly
+    deps: [ env:generate ]
+    cmds:
+      - docker compose up --build --detach
+
+  down-assembly:
+    desc: "Останавливает assembly"
+    dir: deploy/compose/assembly
+    cmds:
+      - docker compose down --volumes
+
+  up-notification:
+    desc: "Поднимает notification"
+    dir: deploy/compose/notification
+    deps: [ env:generate ]
+    cmds:
+      - docker compose up --build --detach
+
+  down-notification:
+    desc: "Останавливает notification"
+    dir: deploy/compose/notification
+    cmds:
+      - docker compose down --volumes
+
+  up-iam:
+    desc: "Поднимает iam вместе с PostgreSQL и Redis"
+    dir: deploy/compose/iam
+    deps: [ env:generate ]
+    cmds:
+      - docker compose up --build --detach
+
+  down-iam:
+    desc: "Останавливает iam"
+    dir: deploy/compose/iam
+    cmds:
+      - docker compose down --volumes
+
+  up-all:
+    desc: "Поднимает всю систему по порядку"
+    cmds:
+      - task: up-core
+      - task: up-inventory
+      - task: up-payment
+      - task: up-iam
+      - task: up-order
+      - task: up-assembly
+      - task: up-notification
+
+  down-all:
+    desc: "Останавливает всю систему"
+    cmds:
+      - task: down-notification
+      - task: down-assembly
+      - task: down-order
+      - task: down-iam
+      - task: down-payment
+      - task: down-inventory
+      - task: down-core
+
+  # === Ручная проверка API ===
+
+  grpc:inventory:list:
+    desc: "Показывает весь каталог деталей через grpcurl"
+    deps: [ grpcurl:install ]
+    cmds:
+      - '{{.GRPCURL}} -plaintext -d "{}" localhost:50051 inventory.v1.InventoryService/ListParts'
+
+  grpc:inventory:get:
+    desc: "Отдаёт одну деталь: task grpc:inventory:get -- <part_uuid>"
+    deps: [ grpcurl:install ]
+    cmds:
+      - '{{.GRPCURL}} -plaintext -d "{\"uuid\": \"{{.CLI_ARGS}}\"}" localhost:50051 inventory.v1.InventoryService/GetPart'
+
+  grpc:payment:pay:
+    desc: "Пробует провести оплату напрямую в payment"
+    deps: [ grpcurl:install ]
+    cmds:
+      - |
+        {{.GRPCURL}} -plaintext -d '{
+          "order_uuid": "11111111-1111-4111-8111-111111111111",
+          "user_uuid": "22222222-2222-4222-8222-222222222222",
+          "payment_method": "PAYMENT_METHOD_CARD"
+        }' localhost:50052 payment.v1.PaymentService/PayOrder
+
+  grpc:iam:register:
+    desc: "Регистрирует тестового пользователя в iam (повторный запуск не ошибка)"
+    summary: |
+      Том Postgres переживает перезапуск системы, поэтому со второго раза сервис
+      честно отвечает AlreadyExists. Это не сбой задачи: пользователь на месте,
+      можно логиниться. Гасим только этот код, любая другая ошибка валит задачу.
+    deps: [ grpcurl:install ]
+    cmds:
+      - |
+        set -e
+
+        OUTPUT=$({{.GRPCURL}} -plaintext -d '{
+          "login": "ernat",
+          "email": "ernat@example.com",
+          "password": "super-secret"
+        }' localhost:50053 iam.v1.AuthService/Register 2>&1) && STATUS=0 || STATUS=$?
+
+        echo "$OUTPUT"
+
+        if [ $STATUS -ne 0 ]; then
+          if echo "$OUTPUT" | grep -q 'AlreadyExists'; then
+            echo "ℹ️  Пользователь уже зарегистрирован — это нормально, можно звать task grpc:iam:login"
+            exit 0
+          fi
+          exit $STATUS
+        fi
+
+  grpc:iam:login:
+    desc: "Логинит тестового пользователя и печатает токены"
+    deps: [ grpcurl:install ]
+    cmds:
+      - |
+        {{.GRPCURL}} -plaintext -d '{
+          "login": "ernat",
+          "password": "super-secret"
+        }' localhost:50053 iam.v1.AuthService/Login
+
+  http:order:scenario:
+    desc: "Полный сценарий: берёт деталь из каталога, создаёт заказ и оплачивает его"
+    deps: [ grpcurl:install ]
+    cmds:
+      - |
+        set -e
+
+        echo "🔍 Берём первую деталь из каталога..."
+        PART_UUID=$({{.GRPCURL}} -plaintext -d '{}' localhost:50051 inventory.v1.InventoryService/ListParts \
+          | grep -m1 '"uuid"' | cut -d'"' -f4)
+
+        if [ -z "$PART_UUID" ]; then
+          echo "❌ Каталог пуст — поднят ли inventory?"
+          exit 1
+        fi
+        echo "✅ Деталь: $PART_UUID"
+
+        echo "🧾 Создаём заказ..."
+        CREATE_RESPONSE=$(curl -sS -X POST http://localhost:8080/api/v1/orders \
+          -H 'Content-Type: application/json' \
+          -d "{\"user_uuid\": \"22222222-2222-4222-8222-222222222222\", \"part_uuids\": [\"$PART_UUID\"]}")
+        echo "$CREATE_RESPONSE"
+
+        ORDER_UUID=$(echo "$CREATE_RESPONSE" | grep -o '"order_uuid":"[^"]*"' | cut -d'"' -f4)
+        if [ -z "$ORDER_UUID" ]; then
+          echo "❌ Заказ не создан"
+          exit 1
+        fi
+
+        echo "💳 Оплачиваем заказ $ORDER_UUID..."
+        curl -sS -X POST "http://localhost:8080/api/v1/orders/$ORDER_UUID/pay" \
+          -H 'Content-Type: application/json' \
+          -d '{"payment_method": "CARD"}'
+        echo ""
+
+        echo "🔎 Читаем заказ..."
+        curl -sS "http://localhost:8080/api/v1/orders/$ORDER_UUID"
+        echo ""
+
+        echo "✅ Готово. Смотри логи assembly и notification: task logs -- assembly"
+
+  logs:
+    desc: "Показывает логи контейнера: task logs -- <имя контейнера>"
+    cmds:
+      - docker logs -f {{.CLI_ARGS}}
+
+  ps:
+    desc: "Показывает состояние всех контейнеров системы"
+    cmds:
+      - docker ps --filter network=microservices-net --format 'table {{"{{"}}.Names{{"}}"}}\t{{"{{"}}.Status{{"}}"}}\t{{"{{"}}.Ports{{"}}"}}'

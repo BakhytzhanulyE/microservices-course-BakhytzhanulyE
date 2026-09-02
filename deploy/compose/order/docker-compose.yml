@@ -1,0 +1,59 @@
+# Сервис заказов и его PostgreSQL. Точка входа всей системы: HTTP API на 8080.
+services:
+
+  postgres-order:
+    image: ${POSTGRES_IMAGE_NAME}
+    container_name: postgres-order
+    env_file:
+      - .env
+    volumes:
+      - postgres_order_data:/var/lib/postgresql/data
+    ports:
+      - "${EXTERNAL_POSTGRES_PORT}:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - microservices-net
+
+  order:
+    build:
+      context: ../../..
+      dockerfile: order/Dockerfile
+    container_name: order
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres-order
+      POSTGRES_PORT: 5432
+      KAFKA_BROKERS: kafka:29092
+      INVENTORY_GRPC_HOST: inventory
+      PAYMENT_GRPC_HOST: payment
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+    ports:
+      - "${HTTP_PORT}:${HTTP_PORT}"
+      - "${METRICS_PORT}:${METRICS_PORT}"
+    depends_on:
+      postgres-order:
+        condition: service_healthy
+    healthcheck:
+      # -O /dev/null, а не --spider: --spider шлёт HEAD, а на /health зарегистрирован
+      # только GET — chi отвечает 405 и healthcheck считает сервис мёртвым.
+      test: [ "CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:${HTTP_PORT}/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - microservices-net
+
+volumes:
+  postgres_order_data:
+
+networks:
+  microservices-net:
+    external: true

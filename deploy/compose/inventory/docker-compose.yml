@@ -1,0 +1,56 @@
+# Каталог деталей и его MongoDB.
+services:
+
+  mongo-inventory:
+    image: ${MONGO_IMAGE_NAME}
+    container_name: mongo-inventory
+    env_file:
+      - .env
+    volumes:
+      - mongo_inventory_data:/data/db
+    ports:
+      - "${EXTERNAL_MONGO_PORT}:27017"
+    healthcheck:
+      test: [ "CMD-SHELL", "echo 'db.runCommand({ ping: 1 }).ok' | mongosh --quiet -u ${MONGO_INITDB_ROOT_USERNAME} -p ${MONGO_INITDB_ROOT_PASSWORD} --authenticationDatabase ${MONGO_AUTH_DB}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - microservices-net
+
+  inventory:
+    build:
+      # Контекст — корень репозитория: Dockerfile копирует ещё platform и shared.
+      context: ../../..
+      dockerfile: inventory/Dockerfile
+    container_name: inventory
+    env_file:
+      - .env
+    environment:
+      # Внутри сети сервис ходит к контейнеру, а не на localhost хоста.
+      MONGO_HOST: mongo-inventory
+      MONGO_PORT: 27017
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+    ports:
+      - "${GRPC_PORT}:${GRPC_PORT}"
+      - "${METRICS_PORT}:${METRICS_PORT}"
+    depends_on:
+      mongo-inventory:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "/bin/grpc-health-probe", "-addr=localhost:${GRPC_PORT}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - microservices-net
+
+volumes:
+  mongo_inventory_data:
+
+networks:
+  microservices-net:
+    external: true

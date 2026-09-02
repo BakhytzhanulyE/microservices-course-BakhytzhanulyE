@@ -1,0 +1,75 @@
+# Аутентификация: пользователи в PostgreSQL, сессии в Redis.
+services:
+
+  postgres-iam:
+    image: ${POSTGRES_IMAGE_NAME}
+    container_name: postgres-iam
+    env_file:
+      - .env
+    volumes:
+      - postgres_iam_data:/var/lib/postgresql/data
+    ports:
+      - "${EXTERNAL_POSTGRES_PORT}:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - microservices-net
+
+  redis-iam:
+    image: ${REDIS_IMAGE_NAME}
+    container_name: redis-iam
+    ports:
+      - "${EXTERNAL_REDIS_PORT}:6379"
+    volumes:
+      - redis_iam_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - microservices-net
+
+  iam:
+    build:
+      context: ../../..
+      dockerfile: iam/Dockerfile
+    container_name: iam
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres-iam
+      POSTGRES_PORT: 5432
+      REDIS_HOST: redis-iam
+      REDIS_PORT: 6379
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+    ports:
+      - "${GRPC_PORT}:${GRPC_PORT}"
+      - "${METRICS_PORT}:${METRICS_PORT}"
+    depends_on:
+      postgres-iam:
+        condition: service_healthy
+      redis-iam:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "/bin/grpc-health-probe", "-addr=localhost:${GRPC_PORT}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - microservices-net
+
+volumes:
+  postgres_iam_data:
+  redis_iam_data:
+
+networks:
+  microservices-net:
+    external: true

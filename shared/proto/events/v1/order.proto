@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package events.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/BakhytzhanulyE/microservices-course-BakhytzhanulyE/shared/pkg/proto/events/v1;events_v1";
+
+// OrderPaid — событие «заказ оплачен».
+message OrderPaid {
+  // UUID события, нужен для дедупликации на стороне консьюмера.
+  string event_uuid = 1;
+  // UUID оплаченного заказа.
+  string order_uuid = 2;
+  // UUID пользователя, оплатившего заказ.
+  string user_uuid = 3;
+  // Сумма оплаты.
+  double payment_amount = 4;
+  // UUID транзакции из платёжного сервиса.
+  string transaction_uuid = 5;
+  // Способ оплаты.
+  string payment_method = 6;
+  // Момент оплаты.
+  google.protobuf.Timestamp paid_at = 7;
+}
+
+// ShipAssembled — событие «корабль собран».
+message ShipAssembled {
+  // UUID события.
+  string event_uuid = 1;
+  // UUID заказа, для которого собран корабль.
+  string order_uuid = 2;
+  // UUID пользователя.
+  string user_uuid = 3;
+  // Сколько секунд заняла сборка.
+  int64 build_time_sec = 4;
+  // Момент завершения сборки.
+  google.protobuf.Timestamp assembled_at = 5;
+}

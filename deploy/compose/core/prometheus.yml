@@ -1,0 +1,34 @@
+# Prometheus сам ходит за метриками, поэтому здесь перечислены все сервисы,
+# которые поднимают /metrics. Имена — это имена контейнеров в сети microservices-net.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: [ "localhost:9090" ]
+
+  - job_name: inventory
+    static_configs:
+      - targets: [ "inventory:9101" ]
+
+  - job_name: payment
+    static_configs:
+      - targets: [ "payment:9102" ]
+
+  - job_name: iam
+    static_configs:
+      - targets: [ "iam:9103" ]
+
+  - job_name: order
+    static_configs:
+      - targets: [ "order:9104" ]
+
+  - job_name: assembly
+    static_configs:
+      - targets: [ "assembly:9105" ]
+
+  - job_name: notification
+    static_configs:
+      - targets: [ "notification:9106" ]

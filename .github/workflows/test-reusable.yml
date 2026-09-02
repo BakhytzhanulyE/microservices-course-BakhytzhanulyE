@@ -1,0 +1,42 @@
+name: Test Reusable
+
+on:
+  workflow_call:
+    inputs:
+      modules:
+        required: true
+        type: string
+      go-version:
+        required: true
+        type: string
+
+jobs:
+  go-test:
+    name: Build and test all Go modules
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📦 Checkout code
+        uses: actions/checkout@v7.0.1
+
+      - name: 🛠 Set up Go
+        uses: actions/setup-go@v7.0.0
+        with:
+          go-version: ${{ inputs.go-version }}
+          # Репозиторий многомодульный, go.mod в корне нет — по умолчанию
+          # setup-go ищет его именно там, не находит и молча отключает кеш
+          # модулей: каждый прогон заново качал все зависимости.
+          cache-dependency-path: "**/go.sum"
+
+      - name: 📌 Install Task
+        uses: arduino/setup-task@v3.0.0
+
+      - name: 🔨 Build all modules
+        env:
+          MODULES: ${{ inputs.modules }}
+        run: task build
+
+      - name: 🧪 Run tests with race detector
+        env:
+          MODULES: ${{ inputs.modules }}
+        run: task test

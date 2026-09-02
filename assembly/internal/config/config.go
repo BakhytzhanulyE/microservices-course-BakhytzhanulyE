@@ -1,0 +1,75 @@
+// Package config собирает конфигурацию сервиса из переменных окружения.
+package config
+
+import (
+	"os"
+
+	"github.com/joho/godotenv"
+
+	"github.com/BakhytzhanulyE/microservices-course-BakhytzhanulyE/assembly/internal/config/env"
+)
+
+var appConfig *config
+
+type config struct {
+	Logger                LoggerConfig
+	Kafka                 KafkaConfig
+	OrderPaidConsumer     OrderPaidConsumerConfig
+	ShipAssembledProducer ShipAssembledProducerConfig
+	Metrics               MetricsConfig
+	Tracing               TracingConfig
+}
+
+// Load читает .env (если он есть) и разбирает переменные окружения.
+func Load(path ...string) error {
+	err := godotenv.Load(path...)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	loggerCfg, err := env.NewLoggerConfig()
+	if err != nil {
+		return err
+	}
+
+	kafkaCfg, err := env.NewKafkaConfig()
+	if err != nil {
+		return err
+	}
+
+	orderPaidConsumerCfg, err := env.NewOrderPaidConsumerConfig()
+	if err != nil {
+		return err
+	}
+
+	shipAssembledProducerCfg, err := env.NewShipAssembledProducerConfig()
+	if err != nil {
+		return err
+	}
+
+	metricsCfg, err := env.NewMetricsConfig()
+	if err != nil {
+		return err
+	}
+
+	tracingCfg, err := env.NewTracingConfig()
+	if err != nil {
+		return err
+	}
+
+	appConfig = &config{
+		Logger:                loggerCfg,
+		Kafka:                 kafkaCfg,
+		OrderPaidConsumer:     orderPaidConsumerCfg,
+		ShipAssembledProducer: shipAssembledProducerCfg,
+		Metrics:               metricsCfg,
+		Tracing:               tracingCfg,
+	}
+
+	return nil
+}
+
+// AppConfig возвращает загруженную конфигурацию.
+func AppConfig() *config {
+	return appConfig
+}
