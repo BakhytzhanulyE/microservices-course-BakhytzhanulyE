@@ -123,6 +123,7 @@ func (d *diContainer) newConsumer(name string, cfg config.ConsumerConfig) kafka.
 		group,
 		[]string{cfg.Topic()},
 		logger.Instance(),
+		kafkaMiddleware.Tracing(),
 		kafkaMiddleware.Logging(logger.Instance()),
 	)
 }

@@ -90,6 +90,7 @@ func (d *diContainer) OrderPaidConsumer() kafka.Consumer {
 			d.ConsumerGroup(),
 			[]string{config.AppConfig().OrderPaidConsumer.Topic()},
 			logger.Instance(),
+			kafkaMiddleware.Tracing(),
 			kafkaMiddleware.Logging(logger.Instance()),
 		)
 	}
