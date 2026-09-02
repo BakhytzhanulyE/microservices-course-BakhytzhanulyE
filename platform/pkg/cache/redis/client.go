@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
+	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/BakhytzhanulyE/microservices-course-BakhytzhanulyE/platform/pkg/cache"
@@ -17,14 +19,23 @@ type client struct {
 }
 
 // NewClient создаёт клиент Redis по адресу addr.
-func NewClient(addr, password string, db int) cache.Client {
-	return &client{
-		rdb: redis.NewClient(&redis.Options{
-			Addr:     addr,
-			Password: password,
-			DB:       db,
-		}),
+//
+// InstrumentTracing вешает спан на каждую команду — без него обращения к кешу
+// в трейсе не видны. Ошибку возвращаем наверх, а не глушим: она означает, что
+// клиент собран с несогласованными опциями, и молча отдавать наполовину
+// настроенный кеш хуже, чем упасть на старте.
+func NewClient(addr, password string, db int) (cache.Client, error) {
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     addr,
+		Password: password,
+		DB:       db,
+	})
+
+	if err := redisotel.InstrumentTracing(rdb); err != nil {
+		return nil, fmt.Errorf("не удалось включить трассировку Redis: %w", err)
 	}
+
+	return &client{rdb: rdb}, nil
 }
 
 // Set кладёт значение в кеш. Всё, кроме строк и байтов, сериализуется в JSON.

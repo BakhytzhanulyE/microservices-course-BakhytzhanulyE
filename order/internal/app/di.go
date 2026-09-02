@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/IBM/sarama"
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
@@ -95,7 +96,21 @@ func (d *diContainer) OrderRepository(ctx context.Context) repository.OrderRepos
 // PgPool создаёт пул соединений с PostgreSQL.
 func (d *diContainer) PgPool(ctx context.Context) *pgxpool.Pool {
 	if d.pgPool == nil {
-		pool, err := pgxpool.New(ctx, config.AppConfig().Postgres.DSN())
+		// ParseConfig + NewWithConfig, а не pgxpool.New: пулу нужно подсунуть
+		// трейсер, иначе SQL-запросы не попадают в трейс и на графике видно
+		// только «ручка заняла 77 мс» без ответа, сколько из них ушло в базу.
+		poolConfig, err := pgxpool.ParseConfig(config.AppConfig().Postgres.DSN())
+		if err != nil {
+			panic(fmt.Sprintf("не удалось разобрать DSN PostgreSQL: %v", err))
+		}
+
+		// WithIncludeQueryParameters намеренно НЕ включаем: значения параметров
+		// уехали бы в Jaeger, а среди них пароли и персональные данные.
+		poolConfig.ConnConfig.Tracer = otelpgx.NewTracer(
+			otelpgx.WithTrimSQLInSpanName(),
+		)
+
+		pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 		if err != nil {
 			panic(fmt.Sprintf("не удалось создать пул PostgreSQL: %v", err))
 		}

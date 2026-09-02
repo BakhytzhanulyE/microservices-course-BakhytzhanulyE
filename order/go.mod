@@ -9,6 +9,7 @@ require (
 	github.com/BakhytzhanulyE/microservices-course-BakhytzhanulyE/shared v0.0.0-00010101000000-000000000000
 	github.com/IBM/sarama v1.60.2
 	github.com/caarlos0/env/v11 v11.4.1
+	github.com/exaring/otelpgx v0.11.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/joho/godotenv v1.5.1

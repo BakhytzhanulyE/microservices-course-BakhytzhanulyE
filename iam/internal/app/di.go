@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	iamV1API "github.com/BakhytzhanulyE/microservices-course-BakhytzhanulyE/iam/internal/api/iam/v1"
@@ -84,7 +85,21 @@ func (d *diContainer) SessionRepository(ctx context.Context) repository.SessionR
 // PgPool создаёт пул соединений с PostgreSQL.
 func (d *diContainer) PgPool(ctx context.Context) *pgxpool.Pool {
 	if d.pgPool == nil {
-		pool, err := pgxpool.New(ctx, config.AppConfig().Postgres.DSN())
+		// ParseConfig + NewWithConfig, а не pgxpool.New: пулу нужно подсунуть
+		// трейсер, иначе SQL-запросы не попадают в трейс и на графике видно
+		// только «ручка заняла 77 мс» без ответа, сколько из них ушло в базу.
+		poolConfig, err := pgxpool.ParseConfig(config.AppConfig().Postgres.DSN())
+		if err != nil {
+			panic(fmt.Sprintf("не удалось разобрать DSN PostgreSQL: %v", err))
+		}
+
+		// WithIncludeQueryParameters намеренно НЕ включаем: значения параметров
+		// уехали бы в Jaeger, а среди них пароли и персональные данные.
+		poolConfig.ConnConfig.Tracer = otelpgx.NewTracer(
+			otelpgx.WithTrimSQLInSpanName(),
+		)
+
+		pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 		if err != nil {
 			panic(fmt.Sprintf("не удалось создать пул PostgreSQL: %v", err))
 		}
@@ -109,7 +124,10 @@ func (d *diContainer) CacheClient(ctx context.Context) cache.Client {
 	if d.cacheClient == nil {
 		redisCfg := config.AppConfig().Redis
 
-		client := redisClient.NewClient(redisCfg.Address(), redisCfg.Password(), redisCfg.DB())
+		client, err := redisClient.NewClient(redisCfg.Address(), redisCfg.Password(), redisCfg.DB())
+		if err != nil {
+			panic(fmt.Sprintf("не удалось создать клиент Redis: %v", err))
+		}
 
 		if err := client.Ping(ctx); err != nil {
 			panic(fmt.Sprintf("Redis не отвечает на ping: %v", err))

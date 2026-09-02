@@ -7,6 +7,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
+	"go.opentelemetry.io/contrib/instrumentation/go.mongodb.org/mongo-driver/mongo/otelmongo"
 
 	inventoryV1API "github.com/BakhytzhanulyE/microservices-course-BakhytzhanulyE/inventory/internal/api/inventory/v1"
 	"github.com/BakhytzhanulyE/microservices-course-BakhytzhanulyE/inventory/internal/config"
@@ -65,7 +66,14 @@ func (d *diContainer) PartRepository(ctx context.Context) repository.PartReposit
 // MongoDBClient подключается к MongoDB и регистрирует закрытие соединения.
 func (d *diContainer) MongoDBClient(ctx context.Context) *mongo.Client {
 	if d.mongoDBClient == nil {
-		client, err := mongo.Connect(ctx, options.Client().ApplyURI(config.AppConfig().Mongo.URI()))
+		// SetMonitor вешает на драйвер отчёты о командах — из них otelmongo делает
+		// спаны на каждый запрос к базе. Без этого в трейсе видно gRPC-вызов
+		// целиком, но не отдельные обращения к Mongo внутри него.
+		clientOptions := options.Client().
+			ApplyURI(config.AppConfig().Mongo.URI()).
+			SetMonitor(otelmongo.NewMonitor())
+
+		client, err := mongo.Connect(ctx, clientOptions)
 		if err != nil {
 			panic(fmt.Sprintf("не удалось подключиться к MongoDB: %v", err))
 		}
