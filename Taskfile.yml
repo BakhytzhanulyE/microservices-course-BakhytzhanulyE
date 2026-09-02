@@ -400,15 +400,31 @@ tasks:
         }' localhost:50052 payment.v1.PaymentService/PayOrder
 
   grpc:iam:register:
-    desc: "Регистрирует тестового пользователя в iam"
+    desc: "Регистрирует тестового пользователя в iam (повторный запуск не ошибка)"
+    summary: |
+      Том Postgres переживает перезапуск системы, поэтому со второго раза сервис
+      честно отвечает AlreadyExists. Это не сбой задачи: пользователь на месте,
+      можно логиниться. Гасим только этот код, любая другая ошибка валит задачу.
     deps: [ grpcurl:install ]
     cmds:
       - |
-        {{.GRPCURL}} -plaintext -d '{
+        set -e
+
+        OUTPUT=$({{.GRPCURL}} -plaintext -d '{
           "login": "ernat",
           "email": "ernat@example.com",
           "password": "super-secret"
-        }' localhost:50053 iam.v1.AuthService/Register
+        }' localhost:50053 iam.v1.AuthService/Register 2>&1) && STATUS=0 || STATUS=$?
+
+        echo "$OUTPUT"
+
+        if [ $STATUS -ne 0 ]; then
+          if echo "$OUTPUT" | grep -q 'AlreadyExists'; then
+            echo "ℹ️  Пользователь уже зарегистрирован — это нормально, можно звать task grpc:iam:login"
+            exit 0
+          fi
+          exit $STATUS
+        fi
 
   grpc:iam:login:
     desc: "Логинит тестового пользователя и печатает токены"
